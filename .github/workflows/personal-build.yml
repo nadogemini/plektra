@@ -1,4 +1,4 @@
-name: Personal build (Vietnamese Telex fix)
+name: Totkey Private
 
 on:
   workflow_dispatch:
@@ -14,6 +14,7 @@ env:
   SHERPA_AAR_SHA256: "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96"
   ASR_MODEL: "sherpa-onnx-zipformer-vi-30M-int8-2026-02-09"
   RIME_ICE_COMMIT: "927e1cf1d3eeb9bf4be85e3f684dba4dd485b6f6"
+  TOTKEY_VERSION: "1.0.0"
 
 jobs:
   build:
@@ -38,6 +39,8 @@ jobs:
             echo "Applying $f"
             base64 -d "$f" | gunzip | git apply
           done
+          R=app/src/main/res
+          rm -f $R/mipmap-*/ic_launcher.webp $R/mipmap-*/ic_launcher_round.webp $R/mipmap-anydpi-v26/ic_launcher.xml $R/mipmap-anydpi-v26/ic_launcher_round.xml
 
       - name: Add sherpa-onnx (on-device speech engine)
         run: |
@@ -79,12 +82,12 @@ jobs:
           ./gradlew :app:testStableDebugUnitTest --tests rocks.pkb.plektra.inputmethod.telex.VietnameseTelexProcessorTest --tests rocks.pkb.plektra.inputmethod.pinyin.PinyinEngineTest
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleStableDebug
+        run: ./gradlew :app:assembleStableDebug "-PTOTKEY_LABEL=Totkey Private" -PTOTKEY_APP_ID=app.totkey.keyboard.private -PPLEKTRA_VERSION_NAME=$TOTKEY_VERSION-private.${{ github.run_number }} -PPLEKTRA_VERSION_CODE=$((10000+${{ github.run_number }}))
 
       - name: Check APK contents
         run: |
           mkdir -p out
-          find app/build/outputs/apk -name "*.apk" -exec cp {} out/ \;
+          cp $(find app/build/outputs/apk -name "*.apk" | head -1) out/Totkey-Private-$TOTKEY_VERSION-${{ github.run_number }}.apk
           ls -la out
           unzip -l out/*.apk | grep -E "asr-vi/encoder.int8.onnx"
           unzip -l out/*.apk | grep -E "lib/arm64-v8a/libsherpa-onnx-jni.so"
@@ -93,16 +96,13 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: plektra-telex-fix
+          name: totkey-private
           path: out/*.apk
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "telex-fix-${{ github.run_number }}" out/*.apk \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "Personal build: Vietnamese Telex + offline voice (#${{ github.run_number }})" \
-            --notes "Unofficial personal debug build of Plektra: Vietnamese Telex fix, no empty keyboard strip, hold Space for live offline Vietnamese dictation (words appear while speaking, tap Space to stop), Mandarin pinyin input. Not an official Plektra release."
+          gh release create "private-${{ github.run_number }}" out/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --prerelease --title "Totkey Private $TOTKEY_VERSION (#${{ github.run_number }})" \
+            --notes "Private build for personal use (includes translate-typing). Not for sharing; use Totkey for the public version."
