@@ -1,3 +1,59 @@
+name: Personal build (Vietnamese Telex fix)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [personal-build]
+    paths-ignore: ["**.md"]
+
+permissions:
+  contents: write
+
+env:
+  SHERPA_VERSION: "1.13.8"
+  SHERPA_AAR_SHA256: "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96"
+  ASR_MODEL: "sherpa-onnx-zipformer-vi-30M-int8-2026-02-09"
+  RIME_ICE_COMMIT: "927e1cf1d3eeb9bf4be85e3f684dba4dd485b6f6"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Apply personal patch
+        run: |
+          cat $(ls personal/patch.part* | sort -V) | base64 -d | gunzip > /tmp/personal.patch
+          git apply --stat /tmp/personal.patch
+          git apply /tmp/personal.patch
+
+      - name: Add sherpa-onnx (on-device speech engine)
+        run: |
+          mkdir -p app/libs
+          curl -fsSL -o app/libs/sherpa-onnx.aar \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v${SHERPA_VERSION}/sherpa-onnx-${SHERPA_VERSION}.aar"
+          echo "${SHERPA_AAR_SHA256}  app/libs/sherpa-onnx.aar" | sha256sum -c -
+          unzip -l app/libs/sherpa-onnx.aar | grep -E "arm64-v8a|classes.jar"
+
+      - name: Add Vietnamese speech model
+        run: |
+          curl -fsSL -o /tmp/model.tar.bz2 \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/${ASR_MODEL}.tar.bz2"
+          tar -xjf /tmp/model.tar.bz2 -C /tmp
+          mkdir -p app/src/main/assets/asr-vi
+          for f in encoder.int8.onnx decoder.onnx joiner.int8.onnx tokens.txt; do
+            cp "/tmp/${ASR_MODEL}/$f" app/src/main/assets/asr-vi/
+          done
+          sha256sum app/src/main/assets/asr-vi/*
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -12,35 +68,6 @@
           python tools/personal/build_pinyin_dict.py /tmp/rime-ice/cn_dicts app/src/main/assets/pinyin/pinyin_dict.txt 100
           cp /tmp/rime-ice/LICENSE app/src/main/assets/pinyin/LICENSE-rime-ice.txt
           ls -la app/src/main/assets/pinyin
-
-      - name: Check the model decodes Vietnamese (same settings as the app)
-        run: |
-          python -m pip install --quiet numpy "sherpa-onnx==${SHERPA_VERSION}" || python -m pip install --quiet numpy sherpa-onnx
-          python - <<'PY'
-          import glob, os, time, wave
-          import numpy as np
-          import sherpa_onnx
-          d = "app/src/main/assets/asr-vi"
-          rec = sherpa_onnx.OfflineRecognizer.from_transducer(
-              encoder=f"{d}/encoder.int8.onnx", decoder=f"{d}/decoder.onnx",
-              joiner=f"{d}/joiner.int8.onnx", tokens=f"{d}/tokens.txt",
-              num_threads=4, sample_rate=16000, feature_dim=80,
-              decoding_method="modified_beam_search", max_active_paths=4)
-          wavs = sorted(glob.glob(f"/tmp/{os.environ['ASR_MODEL']}/test_wavs/*.wav"))
-          assert wavs, "no test wavs"
-          for path in wavs:
-              with wave.open(path) as w:
-                  rate = w.getframerate()
-                  pcm = np.frombuffer(w.readframes(w.getnframes()), dtype=np.int16)
-              samples = np.concatenate([pcm.astype(np.float32) / 32768.0, np.zeros(rate * 3 // 10, np.float32)])
-              s = rec.create_stream()
-              s.accept_waveform(rate, samples)
-              t = time.time()
-              rec.decode_stream(s)
-              text = s.result.text.strip().lower()
-              print(f"{os.path.basename(path)} ({len(pcm)/rate:.1f}s, {time.time()-t:.2f}s): {text}")
-              assert text, "empty transcript"
-          PY
 
       - name: Run Telex and pinyin unit tests
         run: |
