@@ -1,9 +1,9 @@
-name: Totkey Private
+name: Totkey
 
 on:
   workflow_dispatch:
   push:
-    branches: [personal-build]
+    branches: [totkey]
     paths-ignore: ["**.md"]
 
 permissions:
@@ -41,6 +41,8 @@ jobs:
           done
           R=app/src/main/res
           rm -f $R/mipmap-*/ic_launcher.webp $R/mipmap-*/ic_launcher_round.webp $R/mipmap-anydpi-v26/ic_launcher.xml $R/mipmap-anydpi-v26/ic_launcher_round.xml
+          rm app/src/main/java/rocks/pkb/plektra/inputmethod/translate/TranslateTyping.kt
+          for f in personal/public/*.b64; do base64 -d "$f" | gunzip | git apply; done
 
       - name: Add sherpa-onnx (on-device speech engine)
         run: |
@@ -82,12 +84,12 @@ jobs:
           ./gradlew :app:testStableDebugUnitTest --tests rocks.pkb.plektra.inputmethod.telex.VietnameseTelexProcessorTest --tests rocks.pkb.plektra.inputmethod.pinyin.PinyinEngineTest
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleStableDebug "-PTOTKEY_LABEL=Totkey Private" -PTOTKEY_APP_ID=app.totkey.keyboard.private -PPLEKTRA_VERSION_NAME=$TOTKEY_VERSION-private.${{ github.run_number }} -PPLEKTRA_VERSION_CODE=$((10000+${{ github.run_number }}))
+        run: ./gradlew :app:assembleStableDebug -PTOTKEY_APP_ID=app.totkey.keyboard -PTOTKEY_LABEL=Totkey -PPLEKTRA_VERSION_NAME=$TOTKEY_VERSION -PPLEKTRA_VERSION_CODE=$((10000+${{ github.run_number }}))
 
       - name: Check APK contents
         run: |
           mkdir -p out
-          cp $(find app/build/outputs/apk -name "*.apk" | head -1) out/Totkey-Private-$TOTKEY_VERSION-${{ github.run_number }}.apk
+          cp $(find app/build/outputs/apk -name "*.apk" | head -1) out/Totkey-$TOTKEY_VERSION.apk
           ls -la out
           unzip -l out/*.apk | grep -E "asr-vi/encoder.int8.onnx"
           unzip -l out/*.apk | grep -E "lib/arm64-v8a/libsherpa-onnx-jni.so"
@@ -96,13 +98,14 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: totkey-private
+          name: totkey
           path: out/*.apk
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "private-${{ github.run_number }}" out/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --prerelease --title "Totkey Private $TOTKEY_VERSION (#${{ github.run_number }})" \
-            --notes "Private build for personal use (includes translate-typing). Not for sharing; use Totkey for the public version."
+          T="totkey-v$TOTKEY_VERSION"
+          gh release delete "$T" --repo "$GITHUB_REPOSITORY" --cleanup-tag -y || true
+          gh release create "$T" out/*.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Totkey v$TOTKEY_VERSION" --notes-file TOTKEY_RELEASE_NOTES.md
