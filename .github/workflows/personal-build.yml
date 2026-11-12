@@ -1,0 +1,61 @@
+name: Personal build (Vietnamese Telex tone fix)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [personal-build]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Apply Vietnamese Telex tone fix
+        run: |
+          f=app/src/main/java/rocks/pkb/plektra/inputmethod/telex/VietnameseTelexProcessor.kt
+          echo "997f63e3737f1e671e3c1b19eac0d38db081528f5158e8e7777d7a83ea742bc7  $f" | sha256sum -c -
+          echo "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" | base64 -d | gunzip > "$f"
+          git diff --stat
+
+      - name: Run Telex unit tests
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :app:testStableDebugUnitTest --tests rocks.pkb.plektra.inputmethod.telex.VietnameseTelexProcessorTest
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleStableDebug
+
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          find app/build/outputs/apk -name "*.apk" -exec cp {} out/ \;
+          ls -la out
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plektra-telex-fix
+          path: out/*.apk
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "telex-fix-${{ github.run_number }}" out/*.apk \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Personal build: Vietnamese Telex tone fix (#${{ github.run_number }})" \
+            --notes "Unofficial personal debug build of Plektra with a Vietnamese Telex tone placement fix. Not an official Plektra release."
